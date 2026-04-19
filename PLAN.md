@@ -1,14 +1,15 @@
 # go-to-sleep
 
 ## Context
-Reusable Go client for the [Sleeper API](https://docs.sleeper.com) (`https://api.sleeper.app/v1/`). The API is free, read-only, and requires no auth. Initial focus is NFL, but the design supports any sport Sleeper offers. Provides typed structs, a SQLite-backed player cache, and convenience methods for common operations.
+Reusable Go client for the [Sleeper API](https://docs.sleeper.com) (`https://api.sleeper.app/v1/`). The API is free, read-only, and requires no auth. Initial focus is NFL, but the design supports any sport Sleeper offers. Provides typed structs, a SQLite-backed player cache, structured logging, and convenience methods for common operations.
 
 ## Project Setup
 - **Language:** Go (1.22+)
 - **Module:** `github.com/joeyvforthree/go-to-sleep`
 - **Dependencies:**
   - `modernc.org/sqlite` — pure Go SQLite driver (no cgo) for player cache
-  - No other third-party deps — stdlib `net/http` + `encoding/json` for everything else
+  - `golang.org/x/time/rate` — token bucket rate limiter (Go team maintained)
+  - Stdlib for everything else: `net/http`, `encoding/json`, `log/slog`
 
 ## Project Structure
 ```
@@ -21,12 +22,15 @@ go-to-sleep/
 ├── client_test.go
 ├── options.go             # functional options (WithBaseURL, WithCacheDir, etc.)
 ├── models.go              # All structs: User, League, Roster, Player, etc.
+├── errors.go              # API error types
 ├── cache.go               # SQLite-backed player cache
 ├── cache_test.go
 └── testdata/              # fixture JSON for tests
 ```
 
 ## Client Design (`client.go`)
+
+All methods take `context.Context` as the first argument for cancellation and timeout support.
 
 ```go
 package sleeper
@@ -35,44 +39,45 @@ type Client struct {
     httpClient *http.Client
     baseURL    string
     cache      *PlayerCache
+    logger     *slog.Logger
 }
 
 func New(opts ...Option) *Client
 
 // Users
-func (c *Client) GetUser(identifier string) (*User, error)
+func (c *Client) GetUser(ctx context.Context, identifier string) (*User, error)
 
 // Leagues
-func (c *Client) GetUserLeagues(userID, sport, season string) ([]League, error)
-func (c *Client) GetLeague(leagueID string) (*League, error)
-func (c *Client) GetRosters(leagueID string) ([]Roster, error)
-func (c *Client) GetLeagueUsers(leagueID string) ([]LeagueUser, error)
-func (c *Client) GetMatchups(leagueID string, week int) ([]Matchup, error)
-func (c *Client) GetWinnersBracket(leagueID string) ([]BracketMatch, error)
-func (c *Client) GetLosersBracket(leagueID string) ([]BracketMatch, error)
-func (c *Client) GetTransactions(leagueID string, week int) ([]Transaction, error)
-func (c *Client) GetTradedPicks(leagueID string) ([]TradedPick, error)
+func (c *Client) GetUserLeagues(ctx context.Context, userID, sport, season string) ([]League, error)
+func (c *Client) GetLeague(ctx context.Context, leagueID string) (*League, error)
+func (c *Client) GetRosters(ctx context.Context, leagueID string) ([]Roster, error)
+func (c *Client) GetLeagueUsers(ctx context.Context, leagueID string) ([]LeagueUser, error)
+func (c *Client) GetMatchups(ctx context.Context, leagueID string, week int) ([]Matchup, error)
+func (c *Client) GetWinnersBracket(ctx context.Context, leagueID string) ([]BracketMatch, error)
+func (c *Client) GetLosersBracket(ctx context.Context, leagueID string) ([]BracketMatch, error)
+func (c *Client) GetTransactions(ctx context.Context, leagueID string, week int) ([]Transaction, error)
+func (c *Client) GetTradedPicks(ctx context.Context, leagueID string) ([]TradedPick, error)
 
 // Convenience — transactions
-func (c *Client) GetAllTransactions(leagueID string, seasonWeeks int) ([]Transaction, error)
+func (c *Client) GetAllTransactions(ctx context.Context, leagueID string, seasonWeeks int) ([]Transaction, error)
     // Fetches transactions for weeks 1..seasonWeeks. If seasonWeeks <= 0,
     // uses GetSportState() to determine the current week.
-func (c *Client) GetPlayerTransactions(leagueID, playerID string, seasonWeeks int) ([]Transaction, error)
+func (c *Client) GetPlayerTransactions(ctx context.Context, leagueID, playerID string, seasonWeeks int) ([]Transaction, error)
     // GetAllTransactions filtered to transactions where playerID appears in adds or drops.
 
 // Drafts
-func (c *Client) GetUserDrafts(userID, sport, season string) ([]Draft, error)
-func (c *Client) GetLeagueDrafts(leagueID string) ([]Draft, error)
-func (c *Client) GetDraft(draftID string) (*Draft, error)
-func (c *Client) GetDraftPicks(draftID string) ([]DraftPick, error)
-func (c *Client) GetTradedDraftPicks(draftID string) ([]TradedPick, error)
+func (c *Client) GetUserDrafts(ctx context.Context, userID, sport, season string) ([]Draft, error)
+func (c *Client) GetLeagueDrafts(ctx context.Context, leagueID string) ([]Draft, error)
+func (c *Client) GetDraft(ctx context.Context, draftID string) (*Draft, error)
+func (c *Client) GetDraftPicks(ctx context.Context, draftID string) ([]DraftPick, error)
+func (c *Client) GetTradedDraftPicks(ctx context.Context, draftID string) ([]TradedPick, error)
 
 // Players
-func (c *Client) GetPlayers(sport string) (map[string]Player, error)
-func (c *Client) GetTrendingPlayers(sport, trendType string, lookbackHours, limit int) ([]TrendingPlayer, error)
+func (c *Client) GetPlayers(ctx context.Context, sport string) (map[string]Player, error)
+func (c *Client) GetTrendingPlayers(ctx context.Context, sport, trendType string, lookbackHours, limit int) ([]TrendingPlayer, error)
 
 // State
-func (c *Client) GetSportState(sport string) (*SportState, error)
+func (c *Client) GetSportState(ctx context.Context, sport string) (*SportState, error)
 ```
 
 ### Options (`options.go`)
@@ -83,10 +88,66 @@ func WithBaseURL(url string) Option       // for testing
 func WithHTTPClient(c *http.Client) Option
 func WithCacheDir(dir string) Option      // default: ~/.cache/sleeper/
 func WithCacheTTL(d time.Duration) Option // default: 24h
+func WithLogger(l *slog.Logger) Option    // default: slog.Default()
+func WithRateLimit(rpm int) Option        // default: 1000 requests/minute
+```
+
+## Error Handling (`errors.go`)
+
+```go
+// APIError represents a non-2xx response from the Sleeper API.
+type APIError struct {
+    StatusCode int
+    Endpoint   string
+    Body       string // raw response body for debugging
+}
+
+func (e *APIError) Error() string
+
+// Sentinel errors for common cases
+var (
+    ErrNotFound    = errors.New("sleeper: resource not found")       // 404
+    ErrRateLimited = errors.New("sleeper: rate limited")             // 429
+    ErrServerError = errors.New("sleeper: server error")             // 5xx
+)
+```
+
+- Non-200 responses return `*APIError` (wraps the sentinel where applicable, so callers can `errors.Is(err, ErrRateLimited)`)
+- `null` JSON responses → return zero value + `ErrNotFound`
+- Network/timeout errors pass through from `http.Client` unwrapped
+
+## Rate Limiting
+- Sleeper's limit: 1000 requests/minute. Exceeding it risks IP block.
+- Built-in token bucket via `golang.org/x/time/rate` — default: 1000 tokens/minute, burst of 10
+- Configurable via `WithRateLimit(requestsPerMinute int)` option
+- Client automatically waits (respects `context.Context` deadline) if the bucket is empty
+- On 429 response: returns `ErrRateLimited` in case the server-side limit is hit despite client-side throttling
+- Rate limit waits logged at DEBUG, 429 responses logged at WARN
+
+## Logging (`log/slog`)
+Structured logging via stdlib `log/slog`. Consumer provides their own logger via `WithLogger()`, or the client uses `slog.Default()`.
+
+### What's logged and at what level:
+
+| Level | What |
+|-------|------|
+| **DEBUG** | Every HTTP request: method, URL, response status, duration |
+| **DEBUG** | Cache hits/misses: sport, age of cached data |
+| **INFO** | Cache writes: sport, player count, data size |
+| **INFO** | Convenience method progress: "fetching transactions week 3/18" |
+| **WARN** | Non-2xx responses: status code, endpoint, response body (truncated) |
+| **WARN** | Rate limit approached or hit (429) |
+| **ERROR** | Network failures, JSON decode errors, cache I/O errors |
+
+Example output:
+```
+level=DEBUG msg="sleeper request" method=GET url="/league/123/rosters" status=200 duration=142ms
+level=DEBUG msg="player cache hit" sport=nfl age=4h12m
+level=WARN  msg="sleeper api error" endpoint="/user/badid" status=404 body="null"
 ```
 
 ## Models (`models.go`)
-All structs use `json` tags. Unknown/undocumented fields captured via `Metadata map[string]any` fields where applicable.
+All structs use `json` tags. Unknown/undocumented fields captured via `Metadata map[string]any` or `Extra map[string]any` fields where applicable.
 
 ```go
 type User struct {
@@ -97,20 +158,22 @@ type User struct {
 }
 
 type League struct {
-    LeagueID        string         `json:"league_id"`
-    Name            string         `json:"name"`
-    Sport           string         `json:"sport"`
-    Season          string         `json:"season"`
-    Status          string         `json:"status"`
-    RosterPositions []string       `json:"roster_positions"`
-    Settings        map[string]any `json:"settings"`
-    ScoringSettings map[string]any `json:"scoring_settings"`
-    Metadata        map[string]any `json:"metadata"`
+    LeagueID         string         `json:"league_id"`
+    PreviousLeagueID string         `json:"previous_league_id"` // dynasty season chaining
+    Name             string         `json:"name"`
+    Sport            string         `json:"sport"`
+    Season           string         `json:"season"`
+    Status           string         `json:"status"`
+    RosterPositions  []string       `json:"roster_positions"`
+    Settings         map[string]any `json:"settings"`
+    ScoringSettings  map[string]any `json:"scoring_settings"`
+    Metadata         map[string]any `json:"metadata"`
 }
 
 type Roster struct {
     RosterID int      `json:"roster_id"`
     OwnerID  string   `json:"owner_id"`
+    CoOwners []string `json:"co_owners"`
     Players  []string `json:"players"`
     Starters []string `json:"starters"`
     Reserve  []string `json:"reserve"`
@@ -126,14 +189,32 @@ type Player struct {
     Team               string   `json:"team"`
     Age                int      `json:"age"`
     Number             int      `json:"number"`
+    Height             string   `json:"height"`
+    Weight             string   `json:"weight"`
     Status             string   `json:"status"`
     College            string   `json:"college"`
+    BirthCountry       string   `json:"birth_country"`
     YearsExp           int      `json:"years_exp"`
     FantasyPositions   []string `json:"fantasy_positions"`
     InjuryStatus       string   `json:"injury_status"`
+    InjuryStartDate    string   `json:"injury_start_date"`
+    PracticeParticipation string `json:"practice_participation"`
     DepthChartPosition int      `json:"depth_chart_position"`
     DepthChartOrder    int      `json:"depth_chart_order"`
     SearchFullName     string   `json:"search_full_name"`
+    SearchFirstName    string   `json:"search_first_name"`
+    SearchLastName     string   `json:"search_last_name"`
+    SearchRank         int      `json:"search_rank"`
+    Hashtag            string   `json:"hashtag"`
+    // External IDs
+    SportradarID  string `json:"sportradar_id"`
+    EspnID        int    `json:"espn_id"`
+    YahooID       int    `json:"yahoo_id"`
+    RotowireID    int    `json:"rotowire_id"`
+    RotoworldID   int    `json:"rotoworld_id"`
+    FantasyDataID int    `json:"fantasy_data_id"`
+    StatsID       int    `json:"stats_id"`
+    // Catch-all for undocumented fields (e.g., player nicknames)
     Extra map[string]any `json:"-"` // populated via custom UnmarshalJSON
 }
 
@@ -146,6 +227,7 @@ type Transaction struct {
     TransactionID string              `json:"transaction_id"`
     Type          string              `json:"type"`          // "trade", "free_agent", "waiver"
     Status        string              `json:"status"`
+    RosterIDs     []int               `json:"roster_ids"`
     Adds          map[string]int      `json:"adds"`          // player_id → roster_id
     Drops         map[string]int      `json:"drops"`         // player_id → roster_id
     DraftPicks    []TradedPick        `json:"draft_picks"`
@@ -229,26 +311,39 @@ type SportState struct {
   - `GetPlayer(playerID) (*Player, error)` — single player lookup from cache
   - `Clear(sport)` — bust cache for a sport
 - Client uses cache transparently: `GetPlayers()` checks cache first, fetches from API if stale
+- Cache hits/misses logged at DEBUG, writes at INFO
 
 ## Implementation Order
 1. `go mod init github.com/joeyvforthree/go-to-sleep`
-2. `models.go` — all structs
-3. `options.go` — functional options
-4. `client.go` — HTTP client with all API methods
-5. `cache.go` — SQLite player cache
-6. `client_test.go` + `cache_test.go` — using `net/http/httptest` for deterministic testing
-7. `CLAUDE.md`
+2. `models.go` — all structs (including custom `UnmarshalJSON` for `Player.Extra`)
+3. `errors.go` — `APIError`, sentinel errors
+4. `options.go` — functional options
+5. `client.go` — HTTP client with all API methods, slog integration
+6. `cache.go` — SQLite player cache
+7. `client_test.go` + `cache_test.go` — using `net/http/httptest` for deterministic testing
+8. `CLAUDE.md`
 
 ## Verification
 - `go vet ./...` — no issues
 - `go build ./...` — compiles cleanly
 - `go test ./...` — all tests pass
 - Manual smoke test: `GetSportState("nfl")` against live API
+- Manual: verify DEBUG logging shows request/response details
+- Manual: verify cache hit/miss logging works correctly
 
 ## Usage (by consumers)
 ```go
 import sleeper "github.com/joeyvforthree/go-to-sleep"
 
+// Default logger
 client := sleeper.New(sleeper.WithCacheDir("/tmp/sleeper"))
-state, err := client.GetSportState("nfl")
+
+// Custom logger (e.g., JSON output, custom level)
+logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+client := sleeper.New(
+    sleeper.WithCacheDir("/tmp/sleeper"),
+    sleeper.WithLogger(logger),
+)
+
+state, err := client.GetSportState(ctx, "nfl")
 ```
