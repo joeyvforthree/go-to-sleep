@@ -1,18 +1,18 @@
-# sleeper-go
+# go-to-sleep
 
 ## Context
 Reusable Go client for the [Sleeper API](https://docs.sleeper.com) (`https://api.sleeper.app/v1/`). The API is free, read-only, and requires no auth. Initial focus is NFL, but the design supports any sport Sleeper offers. Provides typed structs, a SQLite-backed player cache, and convenience methods for common operations.
 
 ## Project Setup
 - **Language:** Go (1.22+)
-- **Module:** `github.com/joeyvforthree/sleeper-go`
+- **Module:** `github.com/joeyvforthree/go-to-sleep`
 - **Dependencies:**
   - `modernc.org/sqlite` — pure Go SQLite driver (no cgo) for player cache
   - No other third-party deps — stdlib `net/http` + `encoding/json` for everything else
 
 ## Project Structure
 ```
-sleeper-go/
+go-to-sleep/
 ├── go.mod
 ├── go.sum
 ├── CLAUDE.md
@@ -231,7 +231,7 @@ type SportState struct {
 - Client uses cache transparently: `GetPlayers()` checks cache first, fetches from API if stale
 
 ## Implementation Order
-1. `go mod init github.com/joeyvforthree/sleeper-go`
+1. `go mod init github.com/joeyvforthree/go-to-sleep`
 2. `models.go` — all structs
 3. `options.go` — functional options
 4. `client.go` — HTTP client with all API methods
@@ -247,7 +247,7 @@ type SportState struct {
 
 ## Usage (by consumers)
 ```go
-import sleeper "github.com/joeyvforthree/sleeper-go"
+import sleeper "github.com/joeyvforthree/go-to-sleep"
 
 client := sleeper.New(sleeper.WithCacheDir("/tmp/sleeper"))
 state, err := client.GetSportState("nfl")
