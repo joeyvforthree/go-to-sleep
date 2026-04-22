@@ -1,0 +1,5 @@
+*.out
+*.test
+*.exe
+*.db
+.DS_Store
