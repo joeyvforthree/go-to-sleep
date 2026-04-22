@@ -56,7 +56,7 @@ type Player struct {
 	InjuryStatus          string   `json:"injury_status"`
 	InjuryStartDate       string   `json:"injury_start_date"`
 	PracticeParticipation string   `json:"practice_participation"`
-	DepthChartPosition    int      `json:"depth_chart_position"`
+	DepthChartPosition    string   `json:"depth_chart_position"`
 	DepthChartOrder       int      `json:"depth_chart_order"`
 	SearchFullName        string   `json:"search_full_name"`
 	SearchFirstName       string   `json:"search_first_name"`
