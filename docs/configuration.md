@@ -1,6 +1,6 @@
 ---
 title: Configuration
-description: Options for New: player cache, rate limit, logging, HTTP client.
+description: "Options for New: player cache, rate limit, logging, HTTP client."
 ---
 
 `sleeper.New` takes functional options. With none, you get the defaults in the table.
