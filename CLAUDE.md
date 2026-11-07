@@ -12,7 +12,8 @@ make gate       # vet, gofmt check, test (-race where cgo is on), build: what pr
 ```
 
 Integration tests hit the live API and are not in the gate. Tests that need an account read it
-from the environment and skip without it; never commit a real username or league ID:
+from the environment (any Sleeper user, and an NFL league) and skip without it; never commit a
+real username or league ID:
 
 ```bash
 SLEEPER_TEST_USERNAME=... SLEEPER_TEST_LEAGUE_ID=... go test -tags integration ./...

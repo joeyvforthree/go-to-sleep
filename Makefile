@@ -2,6 +2,7 @@
 
 vet:
 	go vet ./...
+	go vet -tags integration ./...  # compiles the live-API tests without running them
 
 # gate is what the global pre-push hook runs before every push. Check-only:
 # it must never rewrite a tracked file, or the push is blocked. The live-API
