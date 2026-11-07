@@ -35,14 +35,14 @@ func main() {
     fmt.Printf("NFL %s — Week %d (%s)\n", state.Season, state.Week, state.SeasonType)
 
     // Look up a user
-    user, err := client.GetUser(ctx, "joeyvfor3")
+    user, err := client.GetUser(ctx, "YOUR_USERNAME")
     if err != nil {
         log.Fatal(err)
     }
     fmt.Printf("User: %s (%s)\n", user.Username, user.UserID)
 
     // Get league rosters
-    rosters, err := client.GetRosters(ctx, "1350223992606195712")
+    rosters, err := client.GetRosters(ctx, "YOUR_LEAGUE_ID")
     if err != nil {
         log.Fatal(err)
     }

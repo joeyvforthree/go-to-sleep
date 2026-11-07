@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -389,4 +391,59 @@ func TestContextCancellation(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error from cancelled context")
 	}
+}
+
+// playersServer serves one NFL player with an unmodeled field and counts requests.
+func playersServer(t *testing.T) (*httptest.Server, *atomic.Int32) {
+	t.Helper()
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/players/nfl" {
+			http.NotFound(w, r)
+			return
+		}
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"123":{"player_id":"123","first_name":"Patrick","nickname":"Showtime"}}`))
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &hits
+}
+
+func TestGetPlayers_ExtraSurvivesCache(t *testing.T) {
+	srv, hits := playersServer(t)
+	c := New(WithBaseURL(srv.URL), WithRateLimit(10000), WithCacheDir(t.TempDir()))
+	ctx := context.Background()
+
+	for i, want := range []int32{1, 1} {
+		players, err := c.GetPlayers(ctx, "nfl")
+		if err != nil {
+			t.Fatalf("call %d: GetPlayers: %v", i+1, err)
+		}
+		if got := players["123"].Extra["nickname"]; got != "Showtime" {
+			t.Errorf("call %d: Extra[nickname] = %v, want %q", i+1, got, "Showtime")
+		}
+		if hits.Load() != want {
+			t.Errorf("call %d: %d requests, want %d", i+1, hits.Load(), want)
+		}
+	}
+}
+
+// Only -race catches a regression here (the gate uses it wherever cgo is on):
+// the first GetPlayers calls open the cache concurrently.
+func TestGetPlayers_Concurrent(t *testing.T) {
+	srv, _ := playersServer(t)
+	c := New(WithBaseURL(srv.URL), WithRateLimit(10000), WithCacheDir(t.TempDir()))
+
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := c.GetPlayers(context.Background(), "nfl"); err != nil {
+				t.Errorf("GetPlayers: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
 }

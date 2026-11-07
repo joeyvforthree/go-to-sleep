@@ -128,9 +128,4 @@ Fields map one to one onto Sleeper's JSON. Fields Sleeper leaves open-ended (`Se
 
 Sleeper adds player fields without notice. Any key the struct does not model lands in
 `Player.Extra` (`map[string]any`) instead of being dropped, so new data is reachable before the
-library catches up.
-
-:::caution
-The player cache stores only the typed fields, so `Extra` is empty when `GetPlayers` is
-served from the cache: only the call that refreshes the cache sees it.
-:::
+library catches up. `Extra` is kept in the player cache too.

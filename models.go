@@ -121,6 +121,32 @@ func (p *Player) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MarshalJSON writes the struct fields plus the keys in Extra, so a Player
+// survives a marshal and unmarshal round trip (as in the player cache).
+// A key in Extra that names a struct field is ignored.
+func (p Player) MarshalJSON() ([]byte, error) {
+	type PlayerAlias Player
+	data, err := json.Marshal(PlayerAlias(p))
+	if err != nil || len(p.Extra) == 0 {
+		return data, err
+	}
+	var out map[string]json.RawMessage
+	if err := json.Unmarshal(data, &out); err != nil {
+		return nil, err
+	}
+	for k, v := range p.Extra {
+		if knownPlayerFields[k] {
+			continue
+		}
+		b, err := json.Marshal(v)
+		if err != nil {
+			return nil, err
+		}
+		out[k] = b
+	}
+	return json.Marshal(out)
+}
+
 // TrendingPlayer represents a trending add/drop.
 type TrendingPlayer struct {
 	PlayerID string `json:"player_id"`

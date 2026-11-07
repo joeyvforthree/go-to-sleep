@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -25,7 +26,9 @@ type Client struct {
 	logger     *slog.Logger
 	rateRPM    int
 	limiter    *rate.Limiter
-	cache      *PlayerCache
+
+	cacheMu sync.Mutex // guards cache, which GetPlayers opens on first use
+	cache   *PlayerCache
 }
 
 // New creates a new Sleeper API client with the given options.
@@ -302,17 +305,9 @@ func (c *Client) GetTradedDraftPicks(ctx context.Context, draftID string) ([]Tra
 // GetPlayers fetches all players for a sport. Uses the SQLite cache if available and fresh.
 func (c *Client) GetPlayers(ctx context.Context, sport string) (map[string]Player, error) {
 	// Try cache first.
-	if c.cache == nil && c.cacheDir != "" {
-		pc, err := NewPlayerCache(c.cacheDir, c.cacheTTL, c.logger)
-		if err != nil {
-			c.logger.Error("cache init failed, proceeding without cache", "error", err)
-		} else {
-			c.cache = pc
-		}
-	}
-
-	if c.cache != nil {
-		players, err := c.cache.GetPlayers(sport)
+	cache := c.playerCache()
+	if cache != nil {
+		players, err := cache.GetPlayers(sport)
 		if err == nil && players != nil {
 			return players, nil
 		}
@@ -323,13 +318,29 @@ func (c *Client) GetPlayers(ctx context.Context, sport string) (map[string]Playe
 		return nil, err
 	}
 
-	if c.cache != nil {
-		if err := c.cache.StorePlayers(sport, players); err != nil {
+	if cache != nil {
+		if err := cache.StorePlayers(sport, players); err != nil {
 			c.logger.Error("cache store failed", "error", err)
 		}
 	}
 
 	return players, nil
+}
+
+// playerCache opens the player cache on first use. It returns nil when there is
+// no cache directory or the cache cannot be opened; a later call tries again.
+func (c *Client) playerCache() *PlayerCache {
+	c.cacheMu.Lock()
+	defer c.cacheMu.Unlock()
+	if c.cache == nil && c.cacheDir != "" {
+		pc, err := NewPlayerCache(c.cacheDir, c.cacheTTL, c.logger)
+		if err != nil {
+			c.logger.Error("cache init failed, proceeding without cache", "error", err)
+		} else {
+			c.cache = pc
+		}
+	}
+	return c.cache
 }
 
 func (c *Client) GetTrendingPlayers(ctx context.Context, sport, trendType string, lookbackHours, limit int) ([]TrendingPlayer, error) {

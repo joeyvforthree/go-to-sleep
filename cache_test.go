@@ -153,3 +153,55 @@ func TestCacheOverwrite(t *testing.T) {
 		t.Errorf("FirstName = %q, want %q", got["p1"].FirstName, "New")
 	}
 }
+
+func TestCacheKeepsExtra(t *testing.T) {
+	pc := testCache(t, time.Hour)
+
+	players := map[string]Player{
+		"p1": {PlayerID: "p1", FirstName: "Patrick", Extra: map[string]any{"nickname": "Showtime", "first_name": "ignored"}},
+	}
+	if err := pc.StorePlayers("nfl", players); err != nil {
+		t.Fatalf("StorePlayers: %v", err)
+	}
+	got, err := pc.GetPlayers("nfl")
+	if err != nil {
+		t.Fatalf("GetPlayers: %v", err)
+	}
+	p := got["p1"]
+	if p.Extra["nickname"] != "Showtime" {
+		t.Errorf("Extra[nickname] = %v, want %q", p.Extra["nickname"], "Showtime")
+	}
+	if p.FirstName != "Patrick" {
+		t.Errorf("FirstName = %q, want %q (an Extra key must not override a field)", p.FirstName, "Patrick")
+	}
+	if _, ok := p.Extra["first_name"]; ok {
+		t.Error("Extra should not contain known field first_name")
+	}
+}
+
+// A cache written before Extra was kept must not be served: its rows have no Extra.
+func TestCacheIgnoresRowsWithoutExtra(t *testing.T) {
+	dir := t.TempDir()
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	pc, err := NewPlayerCache(dir, time.Hour, logger)
+	if err != nil {
+		t.Fatalf("NewPlayerCache: %v", err)
+	}
+	t.Cleanup(func() { pc.Close() })
+
+	// The table and row an earlier version writes.
+	if _, err := pc.db.Exec(`CREATE TABLE players (sport TEXT PRIMARY KEY, data BLOB NOT NULL, fetched_at DATETIME NOT NULL)`); err != nil {
+		t.Fatalf("create old table: %v", err)
+	}
+	if _, err := pc.db.Exec(`INSERT INTO players VALUES ('nfl', '{"p1":{"player_id":"p1"}}', ?)`, time.Now().UTC()); err != nil {
+		t.Fatalf("insert old row: %v", err)
+	}
+
+	got, err := pc.GetPlayers("nfl")
+	if err != nil {
+		t.Fatalf("GetPlayers: %v", err)
+	}
+	if got != nil {
+		t.Errorf("served %d players from a cache written without Extra", len(got))
+	}
+}
