@@ -10,7 +10,19 @@ import (
 	"time"
 )
 
-const testLeagueID = "1350223992606195712" // PS & The U
+// The user and league the tests read come from the environment, so no real
+// account is committed. A test that needs one skips when it is unset.
+func requireEnv(t *testing.T, name string) string {
+	t.Helper()
+	v := os.Getenv(name)
+	if v == "" {
+		t.Skipf("%s not set", name)
+	}
+	return v
+}
+
+func testUsername(t *testing.T) string { return requireEnv(t, "SLEEPER_TEST_USERNAME") }
+func testLeagueID(t *testing.T) string { return requireEnv(t, "SLEEPER_TEST_LEAGUE_ID") }
 
 func integrationClient(t *testing.T) *Client {
 	t.Helper()
@@ -44,15 +56,16 @@ func TestIntegration_GetUser(t *testing.T) {
 	c := integrationClient(t)
 	ctx := context.Background()
 
-	user, err := c.GetUser(ctx, "joeyvfor3")
+	username := testUsername(t)
+	user, err := c.GetUser(ctx, username)
 	if err != nil {
 		t.Fatalf("GetUser: %v", err)
 	}
 	if user.UserID == "" {
 		t.Error("expected non-empty user_id")
 	}
-	if user.Username != "joeyvfor3" {
-		t.Errorf("expected username joeyvfor3, got %s", user.Username)
+	if user.Username != username {
+		t.Errorf("expected username %s, got %s", username, user.Username)
 	}
 	t.Logf("User: id=%s username=%s display=%s", user.UserID, user.Username, user.DisplayName)
 }
@@ -60,13 +73,14 @@ func TestIntegration_GetUser(t *testing.T) {
 func TestIntegration_GetLeague(t *testing.T) {
 	c := integrationClient(t)
 	ctx := context.Background()
+	leagueID := testLeagueID(t)
 
-	league, err := c.GetLeague(ctx, testLeagueID)
+	league, err := c.GetLeague(ctx, leagueID)
 	if err != nil {
 		t.Fatalf("GetLeague: %v", err)
 	}
-	if league.LeagueID != testLeagueID {
-		t.Errorf("expected league_id %s, got %s", testLeagueID, league.LeagueID)
+	if league.LeagueID != leagueID {
+		t.Errorf("expected league_id %s, got %s", leagueID, league.LeagueID)
 	}
 	if league.Name == "" {
 		t.Error("expected non-empty league name")
@@ -80,8 +94,9 @@ func TestIntegration_GetLeague(t *testing.T) {
 func TestIntegration_GetRosters(t *testing.T) {
 	c := integrationClient(t)
 	ctx := context.Background()
+	leagueID := testLeagueID(t)
 
-	rosters, err := c.GetRosters(ctx, testLeagueID)
+	rosters, err := c.GetRosters(ctx, leagueID)
 	if err != nil {
 		t.Fatalf("GetRosters: %v", err)
 	}
@@ -110,8 +125,9 @@ func TestIntegration_GetRosters(t *testing.T) {
 func TestIntegration_GetLeagueUsers(t *testing.T) {
 	c := integrationClient(t)
 	ctx := context.Background()
+	leagueID := testLeagueID(t)
 
-	users, err := c.GetLeagueUsers(ctx, testLeagueID)
+	users, err := c.GetLeagueUsers(ctx, leagueID)
 	if err != nil {
 		t.Fatalf("GetLeagueUsers: %v", err)
 	}
@@ -174,9 +190,10 @@ func TestIntegration_GetPlayers(t *testing.T) {
 func TestIntegration_GetTransactions(t *testing.T) {
 	c := integrationClient(t)
 	ctx := context.Background()
+	leagueID := testLeagueID(t)
 
 	// Fetch week 1 transactions — may be empty depending on league activity
-	txns, err := c.GetTransactions(ctx, testLeagueID, 1)
+	txns, err := c.GetTransactions(ctx, leagueID, 1)
 	if err != nil {
 		t.Fatalf("GetTransactions: %v", err)
 	}
@@ -193,8 +210,9 @@ func TestIntegration_GetTransactions(t *testing.T) {
 func TestIntegration_GetLeagueDrafts(t *testing.T) {
 	c := integrationClient(t)
 	ctx := context.Background()
+	leagueID := testLeagueID(t)
 
-	drafts, err := c.GetLeagueDrafts(ctx, testLeagueID)
+	drafts, err := c.GetLeagueDrafts(ctx, leagueID)
 	if err != nil {
 		t.Fatalf("GetLeagueDrafts: %v", err)
 	}

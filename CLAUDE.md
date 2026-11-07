@@ -11,6 +11,13 @@ go test -race ./...  # -race needs cgo; drop it where there is no C compiler
 make gate       # vet, gofmt check, test (-race where cgo is on), build: what pre-push runs
 ```
 
+Integration tests hit the live API and are not in the gate. Tests that need an account read it
+from the environment and skip without it; never commit a real username or league ID:
+
+```bash
+SLEEPER_TEST_USERNAME=... SLEEPER_TEST_LEAGUE_ID=... go test -tags integration ./...
+```
+
 ## Architecture
 
 Flat package `sleeper` in the repo root. All source files:
