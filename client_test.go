@@ -429,7 +429,8 @@ func TestGetPlayers_ExtraSurvivesCache(t *testing.T) {
 	}
 }
 
-// Run with -race (the gate does): the first GetPlayers calls open the cache concurrently.
+// Only -race catches a regression here (the gate uses it wherever cgo is on):
+// the first GetPlayers calls open the cache concurrently.
 func TestGetPlayers_Concurrent(t *testing.T) {
 	srv, _ := playersServer(t)
 	c := New(WithBaseURL(srv.URL), WithRateLimit(10000), WithCacheDir(t.TempDir()))
