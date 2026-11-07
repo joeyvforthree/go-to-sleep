@@ -153,3 +153,28 @@ func TestCacheOverwrite(t *testing.T) {
 		t.Errorf("FirstName = %q, want %q", got["p1"].FirstName, "New")
 	}
 }
+
+func TestCacheKeepsExtra(t *testing.T) {
+	pc := testCache(t, time.Hour)
+
+	players := map[string]Player{
+		"p1": {PlayerID: "p1", FirstName: "Patrick", Extra: map[string]any{"nickname": "Showtime", "first_name": "ignored"}},
+	}
+	if err := pc.StorePlayers("nfl", players); err != nil {
+		t.Fatalf("StorePlayers: %v", err)
+	}
+	got, err := pc.GetPlayers("nfl")
+	if err != nil {
+		t.Fatalf("GetPlayers: %v", err)
+	}
+	p := got["p1"]
+	if p.Extra["nickname"] != "Showtime" {
+		t.Errorf("Extra[nickname] = %v, want %q", p.Extra["nickname"], "Showtime")
+	}
+	if p.FirstName != "Patrick" {
+		t.Errorf("FirstName = %q, want %q (an Extra key must not override a field)", p.FirstName, "Patrick")
+	}
+	if _, ok := p.Extra["first_name"]; ok {
+		t.Error("Extra should not contain known field first_name")
+	}
+}
