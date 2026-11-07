@@ -7,8 +7,8 @@ Go client library for the Sleeper fantasy sports API.
 ```bash
 go build ./...
 go vet ./...
-go test -race ./...
-make gate       # vet, gofmt check, test with -race, build: what pre-push runs
+go test -race ./...  # -race needs cgo; drop it where there is no C compiler
+make gate       # vet, gofmt check, test (-race where cgo is on), build: what pre-push runs
 ```
 
 ## Architecture

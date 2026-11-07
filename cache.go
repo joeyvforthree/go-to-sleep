@@ -31,7 +31,10 @@ func NewPlayerCache(dir string, ttl time.Duration, logger *slog.Logger) (*Player
 		return nil, fmt.Errorf("cache open: %w", err)
 	}
 
-	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS players (
+	// players_v2 replaced players when cached rows started keeping Player.Extra.
+	// Rows in the old table have no Extra, so they are never read; versions
+	// before the change still read and write the old table.
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS players_v2 (
 		sport      TEXT PRIMARY KEY,
 		data       BLOB NOT NULL,
 		fetched_at DATETIME NOT NULL
@@ -50,7 +53,7 @@ func (pc *PlayerCache) GetPlayers(sport string) (map[string]Player, error) {
 	var data []byte
 	var fetchedAt time.Time
 	err := pc.db.QueryRow(
-		"SELECT data, fetched_at FROM players WHERE sport = ?", sport,
+		"SELECT data, fetched_at FROM players_v2 WHERE sport = ?", sport,
 	).Scan(&data, &fetchedAt)
 	if err == sql.ErrNoRows {
 		pc.logger.Debug("player cache miss", "sport", sport)
@@ -83,7 +86,7 @@ func (pc *PlayerCache) StorePlayers(sport string, players map[string]Player) err
 	}
 
 	_, err = pc.db.Exec(
-		`INSERT INTO players (sport, data, fetched_at) VALUES (?, ?, ?)
+		`INSERT INTO players_v2 (sport, data, fetched_at) VALUES (?, ?, ?)
 		 ON CONFLICT(sport) DO UPDATE SET data = excluded.data, fetched_at = excluded.fetched_at`,
 		sport, data, time.Now().UTC(),
 	)
@@ -97,7 +100,7 @@ func (pc *PlayerCache) StorePlayers(sport string, players map[string]Player) err
 
 // GetPlayer looks up a single player by ID across all cached sports.
 func (pc *PlayerCache) GetPlayer(playerID string) (*Player, error) {
-	rows, err := pc.db.Query("SELECT data, fetched_at FROM players")
+	rows, err := pc.db.Query("SELECT data, fetched_at FROM players_v2")
 	if err != nil {
 		return nil, fmt.Errorf("cache query: %w", err)
 	}
@@ -125,7 +128,7 @@ func (pc *PlayerCache) GetPlayer(playerID string) (*Player, error) {
 
 // Clear removes cached data for a sport.
 func (pc *PlayerCache) Clear(sport string) error {
-	_, err := pc.db.Exec("DELETE FROM players WHERE sport = ?", sport)
+	_, err := pc.db.Exec("DELETE FROM players_v2 WHERE sport = ?", sport)
 	if err != nil {
 		return fmt.Errorf("cache clear: %w", err)
 	}
