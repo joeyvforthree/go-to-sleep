@@ -239,7 +239,8 @@ type SportState struct {
 }
 
 // SeasonProjection is one player's season projection row from Sleeper's
-// projections service.
+// projections service. Team is the player's team that season; Player.Team and
+// Player.Position describe him today.
 type SeasonProjection struct {
 	PlayerID string `json:"player_id"`
 	Season   string `json:"season"`
@@ -252,16 +253,19 @@ type SeasonProjection struct {
 	} `json:"player"`
 	// Stats holds projected stats and the ADP fields: adp_half_ppr, adp_ppr,
 	// adp_std, adp_2qb, adp_dynasty, adp_dynasty_half_ppr, adp_dynasty_ppr,
-	// adp_dynasty_std, adp_dynasty_2qb, adp_rookie, adp_idp.
+	// adp_dynasty_std, adp_dynasty_2qb, adp_idp. Market ADP starts in 2021: the
+	// 2020 values are an ordered integer list with top players missing.
 	Stats map[string]float64 `json:"stats"`
-	// UpdatedAt is when Sleeper last modified the row, in Unix milliseconds;
-	// for a finished season it postdates the drafts the ADP comes from.
-	UpdatedAt int64 `json:"updated_at"`
+	// LastModified is when Sleeper last modified the row, in Unix
+	// milliseconds, or 0 where the row carries no timestamp (2020 and 2021).
+	// For a finished season it postdates the drafts the ADP comes from.
+	LastModified int64 `json:"last_modified"`
 }
 
 // ADP returns the player's ADP for a format ("half_ppr", "ppr", "std", "2qb",
-// "dynasty", "dynasty_half_ppr", "rookie", ...). ok is false when the field is
-// absent or holds Sleeper's no-ADP placeholders (999 and up).
+// "dynasty", "dynasty_half_ppr", ...). ok is false when the field is absent or
+// holds Sleeper's no-ADP placeholder (999). It does not judge the season:
+// values before 2021 are not market ADP.
 func (p SeasonProjection) ADP(format string) (adp float64, ok bool) {
 	v, found := p.Stats["adp_"+format]
 	if !found || v <= 0 || v >= 999 {

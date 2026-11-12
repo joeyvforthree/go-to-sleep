@@ -454,8 +454,8 @@ func TestGetSeasonProjections(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath, gotQuery = r.URL.Path, r.URL.RawQuery
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`[{"player_id":"4039","season":"2022","team":"LAR","updated_at":1673256012113,
-			"player":{"first_name":"Cooper","last_name":"Kupp","position":"WR","team":"LAR","fantasy_positions":["WR"]},
+		w.Write([]byte(`[{"player_id":"4039","season":"2022","team":"LAR","last_modified":1673256012113,
+			"player":{"first_name":"Cooper","last_name":"Kupp","position":"WR","team":"SEA","fantasy_positions":["WR"]},
 			"stats":{"adp_half_ppr":3.6,"adp_ppr":2.1,"adp_2qb":999,"adp_idp":1000,"rec":120.5}},
 			{"player_id":"1","season":"2022","team":null,"player":{"first_name":"No","last_name":"Adp","position":"RB","team":null},"stats":{}}]`))
 	}))
@@ -473,7 +473,7 @@ func TestGetSeasonProjections(t *testing.T) {
 	if q.Get("season_type") != "regular" || len(q["position[]"]) != 2 || q["position[]"][1] != "WR" {
 		t.Errorf("query = %q", gotQuery)
 	}
-	if len(rows) != 2 || rows[0].PlayerID != "4039" || rows[0].Player.LastName != "Kupp" || rows[0].UpdatedAt != 1673256012113 {
+	if len(rows) != 2 || rows[0].PlayerID != "4039" || rows[0].Player.LastName != "Kupp" || rows[0].LastModified != 1673256012113 || rows[0].Team != "LAR" || rows[0].Player.Team != "SEA" {
 		t.Fatalf("rows = %+v", rows)
 	}
 	if v, ok := rows[0].ADP("half_ppr"); !ok || v != 3.6 {

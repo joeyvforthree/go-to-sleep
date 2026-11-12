@@ -256,4 +256,9 @@ func TestIntegration_GetSeasonProjections(t *testing.T) {
 		t.Errorf("%d of %d rows carry a half-PPR ADP, want at least 100", n, len(rows))
 	}
 	t.Logf("2022: %d rows, %d with half-PPR ADP", len(rows), n)
+	for _, r := range rows {
+		if r.Player.FirstName == "Cooper" && r.Player.LastName == "Kupp" && r.LastModified == 0 {
+			t.Error("Kupp's 2022 row has no last_modified")
+		}
+	}
 }
