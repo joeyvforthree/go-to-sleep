@@ -14,6 +14,12 @@ func WithBaseURL(url string) Option {
 	return func(c *Client) { c.baseURL = url }
 }
 
+// WithProjectionsBaseURL overrides the projections service base URL (useful
+// for testing).
+func WithProjectionsBaseURL(url string) Option {
+	return func(c *Client) { c.projURL = url }
+}
+
 // WithHTTPClient sets a custom http.Client.
 func WithHTTPClient(hc *http.Client) Option {
 	return func(c *Client) { c.httpClient = hc }

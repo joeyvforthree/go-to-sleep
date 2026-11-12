@@ -112,6 +112,13 @@ players, err := client.GetPlayers(ctx, "nfl")
 trending, err := client.GetTrendingPlayers(ctx, "nfl", "add", 24, 25)
 ```
 
+### Season projections and ADP
+```go
+// Sleeper's projections service (undocumented; ADP from 2020 on)
+rows, err := client.GetSeasonProjections(ctx, "nfl", 2022, []string{"QB", "RB", "WR", "TE"})
+adp, ok := rows[0].ADP("half_ppr") // also "ppr", "std", "2qb", "dynasty", ...
+```
+
 ### Sport State
 ```go
 state, err := client.GetSportState(ctx, "nfl")

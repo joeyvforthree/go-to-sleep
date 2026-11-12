@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
@@ -17,10 +18,16 @@ import (
 
 const defaultBaseURL = "https://api.sleeper.app/v1"
 
+// defaultProjectionsURL is Sleeper's projections service, separate from the
+// documented v1 API and undocumented; it serves season projections and the
+// draft-market ADP fields.
+const defaultProjectionsURL = "https://api.sleeper.com"
+
 // Client is a Sleeper API client with caching, rate limiting, and structured logging.
 type Client struct {
 	httpClient *http.Client
 	baseURL    string
+	projURL    string
 	cacheDir   string
 	cacheTTL   time.Duration
 	logger     *slog.Logger
@@ -36,6 +43,7 @@ func New(opts ...Option) *Client {
 	c := &Client{
 		httpClient: http.DefaultClient,
 		baseURL:    defaultBaseURL,
+		projURL:    defaultProjectionsURL,
 		cacheTTL:   24 * time.Hour,
 		logger:     slog.Default(),
 		rateRPM:    1000,
@@ -59,15 +67,20 @@ func New(opts ...Option) *Client {
 	return c
 }
 
-// get performs a rate-limited GET request and decodes the JSON response into dst.
-// It returns ErrNotFound for null JSON bodies.
+// get performs a rate-limited GET request against the v1 API and decodes the
+// JSON response into dst. It returns ErrNotFound for null JSON bodies.
 func (c *Client) get(ctx context.Context, endpoint string, dst any) error {
+	return c.getFrom(ctx, c.baseURL, endpoint, dst)
+}
+
+// getFrom is get against any Sleeper host, sharing the rate limiter.
+func (c *Client) getFrom(ctx context.Context, base, endpoint string, dst any) error {
 	c.logger.Debug("rate limit wait", "endpoint", endpoint)
 	if err := c.limiter.Wait(ctx); err != nil {
 		return err
 	}
 
-	url := c.baseURL + endpoint
+	url := base + endpoint
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
@@ -361,4 +374,24 @@ func (c *Client) GetSportState(ctx context.Context, sport string) (*SportState, 
 		return nil, err
 	}
 	return &s, nil
+}
+
+// --- Projections ---
+
+// GetSeasonProjections fetches season-long regular-season projections for a
+// sport and season from Sleeper's projections service, filtered to positions
+// (e.g. QB, RB, WR, TE; none = every position). Each row's Stats carries the
+// draft-market ADP fields; see SeasonProjection.ADP. The service is
+// undocumented, so treat its shape as best-effort.
+func (c *Client) GetSeasonProjections(ctx context.Context, sport string, season int, positions []string) ([]SeasonProjection, error) {
+	q := url.Values{"season_type": {"regular"}}
+	for _, p := range positions {
+		q.Add("position[]", p)
+	}
+	endpoint := fmt.Sprintf("/projections/%s/%d?%s", url.PathEscape(sport), season, q.Encode())
+	var rows []SeasonProjection
+	if err := c.getFrom(ctx, c.projURL, endpoint, &rows); err != nil {
+		return nil, err
+	}
+	return rows, nil
 }

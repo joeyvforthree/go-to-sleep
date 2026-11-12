@@ -237,3 +237,35 @@ type SportState struct {
 	LeagueSeason string `json:"league_season"`
 	DisplayWeek  int    `json:"display_week"`
 }
+
+// SeasonProjection is one player's season projection row from Sleeper's
+// projections service.
+type SeasonProjection struct {
+	PlayerID string `json:"player_id"`
+	Season   string `json:"season"`
+	Team     string `json:"team"`
+	Player   struct {
+		FirstName string `json:"first_name"`
+		LastName  string `json:"last_name"`
+		Position  string `json:"position"`
+		Team      string `json:"team"`
+	} `json:"player"`
+	// Stats holds projected stats and the ADP fields: adp_half_ppr, adp_ppr,
+	// adp_std, adp_2qb, adp_dynasty, adp_dynasty_half_ppr, adp_dynasty_ppr,
+	// adp_dynasty_std, adp_dynasty_2qb, adp_rookie, adp_idp.
+	Stats map[string]float64 `json:"stats"`
+	// UpdatedAt is when Sleeper last modified the row, in Unix milliseconds;
+	// for a finished season it postdates the drafts the ADP comes from.
+	UpdatedAt int64 `json:"updated_at"`
+}
+
+// ADP returns the player's ADP for a format ("half_ppr", "ppr", "std", "2qb",
+// "dynasty", "dynasty_half_ppr", "rookie", ...). ok is false when the field is
+// absent or holds Sleeper's no-ADP placeholders (999 and up).
+func (p SeasonProjection) ADP(format string) (adp float64, ok bool) {
+	v, found := p.Stats["adp_"+format]
+	if !found || v <= 0 || v >= 999 {
+		return 0, false
+	}
+	return v, true
+}
