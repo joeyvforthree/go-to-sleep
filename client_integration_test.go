@@ -239,3 +239,26 @@ func TestIntegration_GetLeagueDrafts(t *testing.T) {
 		t.Logf("  round=%d pick=%d player=%s roster=%d", p.Round, p.PickNo, p.PlayerID, p.RosterID)
 	}
 }
+
+func TestIntegration_GetSeasonProjections(t *testing.T) {
+	c := integrationClient(t)
+	rows, err := c.GetSeasonProjections(context.Background(), "nfl", 2022, []string{"QB", "RB", "WR", "TE"})
+	if err != nil {
+		t.Fatalf("GetSeasonProjections: %v", err)
+	}
+	n := 0
+	for _, r := range rows {
+		if _, ok := r.ADP("half_ppr"); ok {
+			n++
+		}
+	}
+	if n < 100 {
+		t.Errorf("%d of %d rows carry a half-PPR ADP, want at least 100", n, len(rows))
+	}
+	t.Logf("2022: %d rows, %d with half-PPR ADP", len(rows), n)
+	for _, r := range rows {
+		if r.Player.FirstName == "Cooper" && r.Player.LastName == "Kupp" && r.LastModified == 0 {
+			t.Error("Kupp's 2022 row has no last_modified")
+		}
+	}
+}
